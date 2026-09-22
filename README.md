@@ -211,4 +211,8 @@ Covers audio processing, diarization, and full pipeline integration tests.
 
 ## License
 
+<<<<<<< HEAD
 Distributed under the MIT License. See `LICENSE` for more information.
+=======
+Distributed under the MIT License. See `LICENSE` for more information.
+>>>>>>> 3d982312bf265c06a6812fde63be9ee59acbfb8f
