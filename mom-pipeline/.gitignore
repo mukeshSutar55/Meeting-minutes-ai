@@ -1,0 +1,39 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables and sensitive secrets
+.env
+.env.local
+
+# Local application storage, outputs, logs, and temp files
+storage/
+outputs/
+temp/
+logs/
+*.log
+
+# Media and generated documents
+*.mp3
+*.wav
+*.pdf
+*.docx
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating system generated files
+.DS_Store
+Thumbs.db

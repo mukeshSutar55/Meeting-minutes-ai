@@ -1,0 +1,33 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+python-multipart>=0.0.9
+
+# Groq Official SDK
+groq>=0.9.0
+
+# Deepgram SDK (Cloud Diarization)
+deepgram-sdk>=3.0.0
+
+# Audio Processing (PyAV bundles FFmpeg C-libraries natively in wheel)
+av>=11.0.0
+soundfile>=0.12.1
+pydub>=0.25.1
+librosa>=0.10.1
+numpy>=1.26.0
+ffmpeg-python
+static-ffmpeg
+
+
+# Document Generation
+python-docx>=1.1.0
+reportlab>=4.1.0
+dotenv
+
+# Utilities
+python-dotenv>=1.0.1
+loguru>=0.7.2
+tqdm>=4.66.0
+pytest>=8.0.0
+streamlit>=1.29.0
