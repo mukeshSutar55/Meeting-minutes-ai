@@ -1,4 +1,5 @@
 import os
+import httpx
 from deepgram import DeepgramClient
 from config.settings import settings
 from utils.logger import logger
@@ -10,14 +11,27 @@ class SpeakerDiarizer:
             logger.error("DEEPGRAM_API_KEY is missing in settings/environment.")
             raise ValueError("DEEPGRAM_API_KEY is required for Deepgram speaker diarization.")
         
-        logger.info("Initializing Deepgram Client...")
-        self.client = DeepgramClient(api_key=self.api_key)
+        logger.info("Initializing Deepgram Client with extended httpx timeout...")
+
+        # 1. Create a custom httpx timeout (120s write/read, 30s connect)
+        custom_timeout = httpx.Timeout(120.0, connect=30.0, write=120.0, read=120.0)
+
+        # 2. Instantiate DeepgramClient with httpx timeout configuration
+        try:
+            custom_httpx = httpx.Client(timeout=custom_timeout)
+            self.client = DeepgramClient(api_key=self.api_key, httpx_client=custom_httpx)
+        except Exception:
+            self.client = DeepgramClient(api_key=self.api_key)
 
     def diarize(self, audio_path: str, num_speakers: int = None) -> list[dict]:
         """
         Runs speaker diarization via Deepgram API and returns timed speaker segments.
         """
         logger.info(f"Sending audio to Deepgram API: {audio_path}")
+
+        # Detect mimetype dynamically from file extension
+        ext = os.path.splitext(audio_path)[1].lower()
+        mimetype = "audio/mp3" if ext == ".mp3" else "audio/wav"
 
         try:
             with open(audio_path, "rb") as file_stream:
@@ -30,7 +44,7 @@ class SpeakerDiarizer:
                 "punctuate": True
             }
 
-            # Handle method structure across SDK v3/v4/v5
+            # Handle method structure across SDK v3/v4/v5+
             if hasattr(self.client.listen, "v1"):
                 # v5+ modern SDK structure
                 response = self.client.listen.v1.media.transcribe_file(
@@ -40,13 +54,13 @@ class SpeakerDiarizer:
             elif hasattr(self.client.listen, "prerecorded"):
                 # v3/v4 SDK structure
                 response = self.client.listen.prerecorded.v1.transcribe_file(
-                    {"buffer": buffer_data, "mimetype": "audio/wav"},
+                    {"buffer": buffer_data, "mimetype": mimetype},
                     options
                 )
             else:
                 # v3 legacy fallback
                 response = self.client.listen.rest.v("1").transcribe_file(
-                    {"buffer": buffer_data, "mimetype": "audio/wav"},
+                    {"buffer": buffer_data, "mimetype": mimetype},
                     options
                 )
 

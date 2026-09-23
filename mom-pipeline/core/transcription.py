@@ -18,10 +18,11 @@ class GroqTranscriptionEngine:
     def transcribe(self, audio_path: str, prompt: str = "") -> dict:
         """
         Transcribes audio using Groq API's whisper-large-v3 model with segment timestamps.
+        Supports seamless code-switching across English, Hindi, Odia, and Marathi.
         
         Args:
-            audio_path (str): Path to normalized 16kHz WAV audio file.
-            prompt (str, optional): Prompt hint for terminology or language switching context.
+            audio_path (str): Path to processed audio file.
+            prompt (str, optional): Prompt hint for terminology or multi-language switching context.
             
         Returns:
             dict: Structured transcript with text, detected language, and timed segments.
@@ -32,10 +33,12 @@ class GroqTranscriptionEngine:
 
         logger.info(f"Sending audio to Groq Whisper ({settings.GROQ_WHISPER_MODEL}): {os.path.basename(audio_path)}")
 
+        # Multi-language dictionary hint buffer for Whisper initialization
         default_prompt = (
-            prompt if prompt else 
-            "Multilingual transcript featuring English, Hindi, and Odia conversations."
-        )
+        prompt if prompt else 
+        "Meeting transcript in English, Hindi (हिंदी), Odia (ଓଡ଼ିଆ), Marathi (मराठी). "
+        "Key points, action items, decisions, updates."
+)
 
         try:
             with open(audio_path, "rb") as file_stream:
@@ -44,10 +47,11 @@ class GroqTranscriptionEngine:
                     model=settings.GROQ_WHISPER_MODEL,
                     prompt=default_prompt,
                     response_format="verbose_json",
-                    timestamp_granularities=["segment"]
+                    timestamp_granularities=["segment"],
+                    temperature=0.0  # Prevents hallucination on background noise
                 )
 
-            # Convert response to dictionary
+            # Convert Pydantic response model to dictionary
             response_dict = response.model_dump()
             
             raw_segments = response_dict.get("segments", [])
@@ -63,7 +67,10 @@ class GroqTranscriptionEngine:
             detected_language = response_dict.get("language", "unknown")
             full_text = response_dict.get("text", "").strip()
 
-            logger.info(f"Transcription complete. Language detected: {detected_language}. Segments: {len(parsed_segments)}")
+            logger.info(
+                f"Transcription complete. Primary language detected: {detected_language}. "
+                f"Total segments: {len(parsed_segments)}"
+            )
 
             return {
                 "text": full_text,

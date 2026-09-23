@@ -1,4 +1,5 @@
 import json
+import re
 from groq import Groq
 from config.settings import settings
 from utils.logger import logger
@@ -15,16 +16,19 @@ class GroqMoMSummarizer:
         logger.info("Initializing Groq API client for MoM summarization...")
         self.client = Groq(api_key=settings.GROQ_API_KEY)
 
+    def _clean_json_string(self, text: str) -> str:
+        """Removes Markdown code blocks or wrapping quotes to ensure clean JSON parsing."""
+        text = text.strip()
+        # Remove ```json ... ``` code fence if present
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\n?", "", text, flags=re.IGNORECASE)
+            text = re.sub(r"\n?```$", "", text)
+        return text.strip()
+
     def generate_mom(self, aligned_transcript: list[dict]) -> dict:
         """
         Generates structured Minutes of Meeting using Groq LLM while dynamically 
         extracting real participant names from dialogue cues.
-
-        Args:
-            aligned_transcript (list[dict]): Speaker-aligned chronological transcript.
-
-        Returns:
-            dict: JSON containing speaker_map and structured minutes_of_meeting.
         """
         if not aligned_transcript:
             logger.warning("Empty transcript received for summarization.")
@@ -46,80 +50,85 @@ class GroqMoMSummarizer:
         formatted_transcript = "\n".join(transcript_lines)
 
         system_prompt = (
-    "You are an expert executive assistant specializing in processing multilingual meeting transcripts "
-    "(including English, Hindi, and Odia). Analyze the provided transcript and produce a structured "
-    "Minutes of Meeting (MoM) output in English.\n\n"
-    "TASK 1: Speaker Name Detection & Mapping\n"
-    "- Carefully scan the transcript text for self-introductions, greetings, and direct address cues "
-    '(e.g., "Hi, I\'m Samir", "Thanks Will", "This is Mukesh").\n'
-    '- Create a mapping dictionary matching generic speaker IDs (e.g., "Person 1", "Person 2") to their real spoken names.\n'
-    '- If a person\'s real name is not mentioned anywhere in the transcript, retain their original label (e.g., "Person 1").\n\n'
-    "TASK 2: Minutes of Meeting (MoM) Extraction & Document Compliance\n"
-    "- Generate Executive Summary, Key Discussion Points, Decisions Made, and Action Items.\n"
-    "- Use the RESOLVED real names (e.g., Samir, Will) across all summary sections instead of generic labels.\n"
-    "- Decisions Made (where identifiable):\n"
-    "  * Extract formal agreements, agreed strategies, choices finalized, or consensus reached by the team.\n"
-    "  * If no explicit decisions were made during the meeting, return an empty list [].\n"
-    "- Action Items (where identifiable):\n"
-    "  * Extract explicit tasks, follow-ups, or commitments assigned to or accepted by individuals.\n"
-    "  * Extract assigned names using resolved real names. If assigned to a team or unassigned, state 'Unassigned'.\n"
-    "  * Extract deadlines if explicitly stated; otherwise default to 'TBD'.\n"
-    "  * If no actionable tasks or commitments were discussed, return an empty list [].\n"
-    "- Translation & Tone: Ensure all non-English speech segments (Hindi, Odia) are accurately translated and synthesized into professional executive English.\n"
-    "- Factuality & Grounding: Base all summary points strictly on facts present in the transcript. Do NOT hallucinate, extrapolate, or assume outside context.\n"
-    "- Completeness: Retain critical technical context, numbers, deadlines, and project milestones discussed during the recording.\n\n"
-    "Return a strictly formatted JSON object matching this schema:\n"
-    "{\n"
-    '  "speaker_map": {\n'
-    '     "Person 1": "Samir",\n'
-    '     "Person 2": "Will"\n'
-    '  },\n'
-    '  "minutes_of_meeting": {\n'
-    '    "summary": "Concise executive summary of the meeting",\n'
-    '    "key_discussion_points": ["Point 1", "Point 2"],\n'
-    '    "decisions_made": ["Decision 1", "Decision 2"],\n'
-    '    "action_items": [\n'
-    '       {\n'
-    '         "task": "Task description",\n'
-    '         "assigned_to": "Resolved Speaker Name",\n'
-    '         "deadline": "Deadline if specified, else TBD"\n'
-    '       }\n'
-    '    ]\n'
-    '  }\n'
-    "}\n\n"
-    "Ensure the JSON output is strictly valid and contains no markdown formatting outside the JSON response."
-)
+            "You are an executive assistant processing meeting transcripts "
+            "(including English, Hindi, and Odia). Output the final result strictly as a valid JSON object.\n\n"
+            "TASK 1: Speaker Name Detection & Mapping\n"
+            "- Scan transcript text for introductions, greetings, and name cues.\n"
+            "- Map generic IDs (e.g., 'Person 1') to real names (e.g., 'Samir'). If unnamed, retain original ID.\n\n"
+            "TASK 2: Minutes of Meeting (MoM) Extraction\n"
+            "- Provide summary, key_discussion_points, decisions_made, and action_items.\n"
+            "- Use resolved real names across all summary fields.\n"
+            "- Action items must contain: 'task', 'assigned_to', and 'deadline' ('TBD' if unstated).\n"
+            "- Translate Hindi/Odia segments into professional English.\n"
+            "- Do NOT hallucinate or assume facts outside the transcript.\n\n"
+            "Respond ONLY with a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "speaker_map": {"Person 1": "Samir"},\n'
+            '  "minutes_of_meeting": {\n'
+            '    "summary": "Executive summary...",\n'
+            '    "key_discussion_points": ["Point 1"],\n'
+            '    "decisions_made": ["Decision 1"],\n'
+            '    "action_items": [{"task": "Task", "assigned_to": "Samir", "deadline": "TBD"}]\n'
+            '  }\n'
+            "}"
+        )
+
+        user_prompt = f"Extract the MoM from this transcript into valid JSON format:\n\n{formatted_transcript}"
 
         logger.info(f"Generating MoM and resolving speaker names via Groq API ({settings.GROQ_LLM_MODEL})...")
 
+        raw_content = ""
         try:
+            # Primary Call: Strict JSON Object Mode
             response = self.client.chat.completions.create(
                 model=settings.GROQ_LLM_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Meeting Transcript:\n{formatted_transcript}"}
+                    {"role": "user", "content": user_prompt}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2
+                temperature=0.1
             )
-
             raw_content = response.choices[0].message.content
-            mom_result = json.loads(raw_content)
+            cleaned_json = self._clean_json_string(raw_content)
+            mom_result = json.loads(cleaned_json)
 
-            logger.info("MoM generation and speaker resolution completed successfully.")
+            logger.info("MoM generation completed successfully.")
             return mom_result
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response from LLM: {str(e)}")
-            return {
-                "speaker_map": {},
-                "minutes_of_meeting": {
-                    "summary": raw_content if 'raw_content' in locals() else "Summary generation failed.",
-                    "key_discussion_points": [],
-                    "decisions_made": [],
-                    "action_items": []
-                }
-            }
         except Exception as e:
-            logger.error(f"Groq LLM summarization call failed: {str(e)}")
-            raise RuntimeError(f"MoM summarization failed: {str(e)}")
+            logger.warning(f"Strict JSON mode failed ({str(e)}). Retrying without response_format constraint...")
+            
+            try:
+                # Fallback Call: Relaxed mode for complex multilingual transcripts
+                fallback_response = self.client.chat.completions.create(
+                    model=settings.GROQ_LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.1
+                )
+                raw_content = fallback_response.choices[0].message.content
+                cleaned_json = self._clean_json_string(raw_content)
+                
+                # Regex extract JSON object if markdown wrapper was generated
+                match = re.search(r"\{.*\}", cleaned_json, re.DOTALL)
+                if match:
+                    cleaned_json = match.group(0)
+
+                mom_result = json.loads(cleaned_json)
+                logger.info("Fallback MoM generation succeeded.")
+                return mom_result
+
+            except Exception as fallback_error:
+                logger.error(f"MoM generation failed completely: {str(fallback_error)}")
+                return {
+                    "speaker_map": {},
+                    "minutes_of_meeting": {
+                        "summary": "Failed to parse generated summary into structured JSON.",
+                        "key_discussion_points": [],
+                        "decisions_made": [],
+                        "action_items": []
+                    }
+                }
