@@ -4,8 +4,8 @@ An end-to-end, privacy-focused Python application that converts multilingual mee
 
 ## Key Features
 
-- **Multilingual Speech-to-Text** — Converts audio into clean text using Whisper / IndicASR.
-- **Speaker Diarization** — Identifies and separates individual speakers using PyAnnote diarization and embedding tracking.
+- **Multilingual Speech-to-Text** — Converts audio into clean text using Whisper .
+- **Speaker Diarization** — Identifies and separates individual speakers using DeepGram Nova3  diarization and embedding tracking.
 - **Transcript-Diarization Alignment** — Synchronizes diarization timestamps with the transcript for accurate speaker attribution.
 - **Speaker Analytics** — Computes talk-time, turn counts, and participation ratios per speaker.
 - **Structured Summarization** — Generates Executive Summaries, Key Discussion Points, Decisions Made, and Action Items via LLM.
