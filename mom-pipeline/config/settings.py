@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     OUTPUT_DIR: Path = BASE_DIR / "storage" / "outputs"
 
     # API Configuration
-    HOST: str = "0.0.0.0"
+    HOST: str = "127.0.0.1"
     PORT: int = 8000
     DEBUG: bool = True
     
